@@ -1,0 +1,70 @@
+你可以将 MCP client 封装成一个 Python 类或模块，然后在你的 agent 逻辑中调用它，实现“自动发现工具→选择工具→执行工具”的流程。下面是一个典型的集成方式：
+
+1. 封装 MCP Client# mcp_client_wrapper.py
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+class MCPClient:
+    def __init__(self, server_cmd="python", server_args=None):
+        if server_args is None:
+            server_args = ["example_server.py"]
+        self.server_params = StdioServerParameters(
+            command=server_cmd,
+            args=server_args,
+            env=None,
+        )
+        self.session = None
+        self._read = None
+        self._write = None
+
+    async def __aenter__(self):
+        self._client_ctx = stdio_client(self.server_params)
+        self._read, self._write = await self._client_ctx.__aenter__()
+        self.session = ClientSession(self._read, self._write)
+        await self.session.__aenter__()
+        await self.session.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.session.__aexit__(exc_type, exc, tb)
+        await self._client_ctx.__aexit__(exc_type, exc, tb)
+
+    async def list_tools(self):
+        return await self.session.list_tools()
+
+    async def call_tool(self, tool_name, arguments):
+        return await self.session.call_tool(tool_name, arguments)
+
+
+
+
+2. 在 Agent 里集成# agent.py
+import asyncio
+from mcp_client_wrapper import MCPClient
+
+async def agent_main():
+    async with MCPClient(server_cmd="python", server_args=["example_server.py"]) as mcp:
+        # 1. 获取所有工具
+        tools_response = await mcp.list_tools()
+        tools = tools_response.tools
+
+        # 2. 选择工具（这里举例） use llm call
+        chosen_tool = llm_choose_tool() 
+
+        print(f"Agent 选择的工具: {chosen_tool.name}")
+
+        # 3. 构造参数并调用工具
+        arguments = {"a": 3, "b": 5}  # 假设 sum 工具需要 a, b
+        result = await mcp.call_tool(chosen_tool.name, arguments)
+        print("工具执行结果:", result)
+
+if __name__ == "__main__":
+    asyncio.run(agent_main())
+
+3. 说明
+ • 你可以根据 tools_response.tools 里的内容（如 name、description、inputSchema）用任意逻辑选择工具。
+ • 你可以把 agent 的决策逻辑（如解析用户输入、选择工具、构造参数）和 MCPClient 解耦。
+ • MCPClient 支持 async with，自动管理连接和资源。
+
+这样，你的 agent 就可以自动发现 MCP 服务器的工具，选择合适的工具，并调用执行，获得结果。你只需在 agent 逻辑里实现“选择工具”和“参数构造”部分即可。
+
