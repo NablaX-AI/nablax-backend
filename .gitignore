@@ -159,3 +159,5 @@ tmp/
 # Lock files
 uv.lock
 .env
+
+.claude/

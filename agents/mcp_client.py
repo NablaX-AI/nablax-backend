@@ -267,7 +267,7 @@ async def test_mcp_client():
     # Example server script path
     server_script = os.path.join(
         os.path.dirname(__file__), 
-        "../mail_draft_mcp_service/mcp_server.py"
+        "../mcp_server/mail_draft_mcp/drafter.py"
     )
     
     async with create_mcp_client(server_script, "email") as client:
